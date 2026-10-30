@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>Putt Battle — Real-Time Multiplayer Mini Golf</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- HOME SCREEN -->
+  <section id="screen-home" class="screen active">
+    <div class="card">
+      <h1>⛳ Putt Battle</h1>
+      <p class="tagline">Real-time multiplayer mini golf. Play with friends on one link.</p>
+      <input id="name-input" maxlength="16" placeholder="Your name" autocomplete="off" />
+      <button id="btn-create" class="btn btn-primary">Create Room</button>
+      <div class="divider">or</div>
+      <div class="join-row">
+        <input id="code-input" maxlength="4" placeholder="ROOM CODE" autocomplete="off" />
+        <button id="btn-join" class="btn btn-secondary">Join</button>
+      </div>
+      <p id="home-error" class="error"></p>
+    </div>
+  </section>
+
+  <!-- LOBBY SCREEN -->
+  <section id="screen-lobby" class="screen">
+    <div class="card">
+      <h2>Room code</h2>
+      <div class="room-code" id="room-code-display">----</div>
+      <p class="tagline">Share this code — up to 6 players.</p>
+      <ul id="lobby-players" class="player-list"></ul>
+      <button id="btn-start" class="btn btn-primary">Start Game</button>
+      <p id="lobby-hint" class="hint">Waiting for the host to start…</p>
+    </div>
+  </section>
+
+  <!-- GAME SCREEN -->
+  <section id="screen-game" class="screen">
+    <div class="hud">
+      <div class="hud-left">
+        <span id="hole-name">Hole</span>
+        <span id="hole-counter" class="pill"></span>
+        <span id="par-pill" class="pill"></span>
+      </div>
+      <div class="hud-right" id="turn-indicator">—</div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="course-canvas" width="900" height="500"></canvas>
+      <div id="power-meter"><div id="power-fill"></div></div>
+      <div id="toast"></div>
+    </div>
+
+    <ul id="scoreboard" class="scoreboard"></ul>
+
+    <div id="hole-summary" class="overlay hidden">
+      <div class="card">
+        <h2 id="hole-summary-title">Hole complete!</h2>
+        <ul id="hole-summary-list" class="player-list"></ul>
+        <p class="hint">Next hole starting…</p>
+      </div>
+    </div>
+
+    <div id="game-over" class="overlay hidden">
+      <div class="card">
+        <h2>🏆 Final results</h2>
+        <ul id="podium" class="player-list"></ul>
+        <button id="btn-play-again" class="btn btn-primary">Back to menu</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>
