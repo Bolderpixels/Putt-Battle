@@ -2,7 +2,7 @@
 const { io } = require('socket.io-client');
 const assert = require('assert');
 
-const URL = 'http://localhost:3000';
+const URL = process.env.URL || 'http://localhost:3000';
 const connect = () => new Promise(res => { const s = io(URL, { forceNew: true }); s.on('connect', () => res(s)); });
 const call = (s, ev, data) => new Promise(res => s.emit(ev, data, res));
 const once = (s, ev, ms = 3000) => new Promise((res, rej) => {
@@ -22,6 +22,10 @@ async function waitFor(fn, ms = 3000) {
 (async () => {
   const [a, b, c] = await Promise.all([connect(), connect(), connect()]);
   [a, b, c].forEach(trackState);
+
+  const catalog = await (await fetch(URL + '/api/courses')).json();
+  assert(catalog.courses.length >= 30, 'at least 30 courses to choose from, got ' + catalog.courses.length);
+  assert(catalog.weathers.includes('rain') && catalog.weathers.includes('night'), 'weather list');
 
   const created = await call(a, 'create-room', { name: 'Alice<script>' });
   assert(created.ok && created.isHost, 'create');
@@ -49,7 +53,17 @@ async function waitFor(fn, ms = 3000) {
   a.emit('set-courses', { ids: [] });
   await sleep(100);
   lob = await call(a, 'join-room', { code, name: 'Alice' });
-  assert.deepStrictEqual(lob.courseIds, ['pine-forest', 'mesa-maze'], 'host picked courses');
+  assert.deepStrictEqual(lob.courseIds, ['mesa-maze', 'pine-forest'], 'host picked courses, in the host order');
+  assert.strictEqual(lob.weather, 'clear', 'default weather');
+
+  // weather: host only, validated, visible to everyone, works any time
+  b.emit('set-weather', { weather: 'rain' });
+  await sleep(100);
+  assert.strictEqual((await call(a, 'join-room', { code, name: 'Alice' })).weather, 'clear', 'non-host cannot change weather');
+  assert.strictEqual((await call(a, 'set-weather', { weather: 'tornado' })).ok, false, 'unknown weather rejected');
+  const heard = once(c, 'lobby-update');
+  assert((await call(a, 'set-weather', { weather: 'night' })).ok, 'host sets weather');
+  assert.strictEqual((await heard).weather, 'night', 'guests are told');
 
   // start; host-only
   b.emit('start-game');
@@ -58,15 +72,19 @@ async function waitFor(fn, ms = 3000) {
   const holeStart = once(a, 'hole-start');
   a.emit('start-game');
   const hs = await holeStart;
-  assert.strictEqual(hs.course.id, 'pine-forest');
+  assert.strictEqual(hs.course.id, 'mesa-maze', 'first hole is the host first pick');
   assert.strictEqual(hs.totalHoles, 2);
   await waitFor(() => a.latest && a.latest.phase === 'aiming');
+
+  const wx = once(b, 'state-update');
+  assert((await call(a, 'set-weather', { weather: 'snow' })).ok, 'weather mid-game');
+  assert.strictEqual((await wx).weather, 'snow', 'state-update carries weather');
 
   // restart: host only
   assert.strictEqual((await call(b, 'restart-hole')).ok, false, 'non-host restart rejected');
   const again = once(a, 'hole-start');
   assert((await call(a, 'restart-hole')).ok, 'host restart');
-  assert.strictEqual((await again).course.id, 'pine-forest');
+  assert.strictEqual((await again).course.id, 'mesa-maze');
 
   // change course: host only, validated, replaces the current hole
   assert.strictEqual((await call(b, 'change-course', { id: 'frozen-lake' })).ok, false, 'non-host change rejected');

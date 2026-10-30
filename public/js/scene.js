@@ -20,7 +20,29 @@ const THEMES = {
     turfA: '#23a39b', turfB: '#1b8d86', border: '#e9f4fb', dirt: '#8a6a50', far: '#f2f8ff',
     wall: '#7a4c2b', wallTop: '#a67242', sand: '#eef3f6', sandEdge: '#c9d9e3',
   },
+  tropical: {
+    skyTop: '#2fb0ea', skyBottom: '#d6f7ff', fog: '#d6f7ff',
+    turfA: '#7fdc4a', turfB: '#6acb3d', border: '#ecd9a0', dirt: '#c9a469', far: '#f0dfaa',
+    wall: '#a8693a', wallTop: '#d08d52', sand: '#f6e7b4', sandEdge: '#e2cd8c',
+  },
+  autumn: {
+    skyTop: '#6fa8e6', skyBottom: '#ffe6c2', fog: '#ffe0b8',
+    turfA: '#a9bd3c', turfB: '#94a82f', border: '#c4621f', dirt: '#7a4a2a', far: '#b9772f',
+    wall: '#8a5733', wallTop: '#b57c46', sand: '#f0dca6', sandEdge: '#d6bd80',
+  },
 };
+
+// Cosmetic only: the host picks one and everybody sees it. Physics never changes.
+const WEATHER = {
+  clear:  { sky: null, fog: null, near: 1600, far: 4600, hemi: 1.55, sun: 2.3, sunColor: '#fff3dc', hemiColor: '#ffffff', precip: null },
+  cloudy: { sky: ['#8aa2b8', '#dde5ec'], fog: '#cbd5de', near: 1200, far: 3800, hemi: 1.9, sun: 0.9, sunColor: '#e8eef5', hemiColor: '#f2f6fa', precip: null },
+  rain:   { sky: ['#46535f', '#95a2ae'], fog: '#8a96a1', near: 650, far: 2700, hemi: 1.45, sun: 0.55, sunColor: '#c9d6e2', hemiColor: '#dbe6f0', precip: 'rain' },
+  snow:   { sky: ['#9aacbf', '#eef3f8'], fog: '#e3ebf2', near: 800, far: 3000, hemi: 1.9, sun: 1.0, sunColor: '#f3f7ff', hemiColor: '#f4f8ff', precip: 'snow' },
+  fog:    { sky: ['#bfc9d0', '#e1e6e9'], fog: '#d0d8dc', near: 120, far: 1400, hemi: 1.8, sun: 0.8, sunColor: '#f2f2f2', hemiColor: '#f4f4f4', precip: null },
+  sunset: { sky: ['#3a49a0', '#ffae68'], fog: '#f1a66e', near: 1400, far: 4200, hemi: 1.2, sun: 2.0, sunColor: '#ff9a52', hemiColor: '#ffd2a6', precip: null, sunLow: true },
+  night:  { sky: ['#060b22', '#1c2d63'], fog: '#0f1b3f', near: 900, far: 3600, hemi: 1.3, sun: 1.25, sunColor: '#8fb0ff', hemiColor: '#8aa2ff', precip: null, stars: true },
+};
+const PRECIP_DROPS = 900;
 
 const WALL_H = 18;
 const PLATFORM_MARGIN = 46;
@@ -59,6 +81,9 @@ export class GolfScene {
     this.config = { ballR: 10, holeR: 16, wallHalf: 6 };
     this.mode = 'showcase';
     this.camMode = 'overview';
+    this.weather = 'clear';
+    this.theme = null;
+    this.precip = null;
     this.course = null;
     this.pad = { top: 84, bottom: 124, side: 12 };
     this.turn = { id: null, phase: 'lobby' };
@@ -143,8 +168,7 @@ export class GolfScene {
     this.waterRipples = [];
     this.flag = null;
 
-    this._buildSky(th);
-    this.scene.fog = new THREE.Fog(new THREE.Color(th.fog), 1600, 4600);
+    this.theme = th;
     this.hemi.groundColor.set(th.border);
 
     // turf: big checkerboard like the reference game
@@ -199,7 +223,7 @@ export class GolfScene {
     sc.near = 50; sc.far = 2200;
     sc.updateProjectionMatrix();
     this.sun.target.position.set(w / 2, 0, h / 2);
-    this.sun.position.set(w / 2 - 380, 900, h / 2 + 300);
+    this._applyWeather(); // sky, fog, light and precipitation for the current weather
 
     for (const e of this.balls.values()) e.snap = true;
     if (this.mode === 'play') this._applyPlayCamera();
@@ -215,17 +239,105 @@ export class GolfScene {
     if (this.scene.background && this.scene.background.dispose) this.scene.background.dispose();
   }
 
-  _buildSky(th) {
+  setWeather(id) {
+    const next = WEATHER[id] ? id : 'clear';
+    if (this.weather === next) return;
+    this.weather = next;
+    this._applyWeather();
+  }
+
+  _applyWeather() {
+    const th = this.theme;
+    if (!th) return;
+    const wx = WEATHER[this.weather] || WEATHER.clear;
+    const [top, bottom] = wx.sky || [th.skyTop, th.skyBottom];
+    this._buildSky(top, bottom, wx.stars);
+    this.scene.fog = new THREE.Fog(new THREE.Color(wx.fog || th.fog), wx.near, wx.far);
+    this.hemi.intensity = wx.hemi;
+    this.hemi.color.set(wx.hemiColor);
+    this.sun.intensity = wx.sun;
+    this.sun.color.set(wx.sunColor);
+    if (this.course) {
+      const { width: w, height: h } = this.course;
+      this.sun.position.set(w / 2 - (wx.sunLow ? 950 : 380), wx.sunLow ? 360 : 900, h / 2 + 300);
+    }
+    this._buildPrecip(wx.precip);
+  }
+
+  _buildSky(top, bottom, stars) {
     const c = document.createElement('canvas');
-    c.width = 4; c.height = 256;
+    c.width = 512; c.height = 512;
     const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, th.skyTop);
-    grad.addColorStop(1, th.skyBottom);
+    const grad = g.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, top);
+    grad.addColorStop(1, bottom);
     g.fillStyle = grad;
-    g.fillRect(0, 0, 4, 256);
-    const t = canvasTexture(c);
-    this.scene.background = t;
+    g.fillRect(0, 0, 512, 512);
+    if (stars) {
+      const rnd = mulberry32(99);
+      for (let i = 0; i < 90; i++) {
+        g.fillStyle = `rgba(255,255,255,${0.35 + rnd() * 0.65})`;
+        g.beginPath();
+        g.arc(rnd() * 512, rnd() * 300, 0.6 + rnd() * 1.3, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    if (this.scene.background && this.scene.background.dispose) this.scene.background.dispose();
+    this.scene.background = canvasTexture(c);
+  }
+
+  // rain = slanted streaks, snow = drifting flakes, both in a box around the course
+  _buildPrecip(kind) {
+    if (this.precip) {
+      this.scene.remove(this.precip.obj);
+      this.precip.obj.geometry.dispose();
+      this.precip.obj.material.dispose();
+      this.precip = null;
+    }
+    if (!kind) return;
+    const w = this.course ? this.course.width : 900, h = this.course ? this.course.height : 500;
+    const drops = [];
+    for (let i = 0; i < PRECIP_DROPS; i++) {
+      drops.push({ x: -200 + Math.random() * (w + 400), y: Math.random() * 520, z: -200 + Math.random() * (h + 400), s: Math.random() });
+    }
+    let obj;
+    if (kind === 'rain') {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PRECIP_DROPS * 6), 3).setUsage(THREE.DynamicDrawUsage));
+      obj = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#d4e6f7', transparent: true, opacity: 0.55, fog: false }));
+    } else {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PRECIP_DROPS * 3), 3).setUsage(THREE.DynamicDrawUsage));
+      obj = new THREE.Points(geo, new THREE.PointsMaterial({
+        size: 6, color: '#ffffff', map: this.points.material.map, transparent: true, depthWrite: false, sizeAttenuation: true, fog: false,
+      }));
+    }
+    obj.frustumCulled = false;
+    this.scene.add(obj);
+    this.precip = { kind, obj, drops, w, h };
+  }
+
+  _updatePrecip(dt) {
+    const p = this.precip;
+    if (!p) return;
+    const pos = p.obj.geometry.attributes.position.array;
+    for (let i = 0; i < p.drops.length; i++) {
+      const d = p.drops[i];
+      if (p.kind === 'rain') {
+        d.y -= (560 + d.s * 220) * dt;
+        d.x -= 70 * dt;
+        if (d.y < 0) { d.y = 520; d.x = -200 + Math.random() * (p.w + 400); }
+        const o = i * 6;
+        pos[o] = d.x; pos[o + 1] = d.y; pos[o + 2] = d.z;
+        pos[o + 3] = d.x + 5; pos[o + 4] = d.y + 26; pos[o + 5] = d.z;
+      } else {
+        d.y -= (35 + d.s * 40) * dt;
+        d.x += Math.sin(this.time * 0.8 + d.s * 20) * 18 * dt;
+        if (d.y < 0) { d.y = 520; d.x = -200 + Math.random() * (p.w + 400); }
+        pos[i * 3] = d.x; pos[i * 3 + 1] = d.y; pos[i * 3 + 2] = d.z;
+      }
+    }
+    p.obj.geometry.attributes.position.needsUpdate = true;
   }
 
   _buildHazards(course, th, group) {
@@ -233,12 +345,15 @@ export class GolfScene {
     const n = hazards.length;
     hazards.forEach((hz, i) => {
       const y = 0.35 + (n - i) * 0.3; // earlier hazards win in physics, so draw them on top
-      if (hz.type === 'ice') {
+      if (hz.shape === 'rect') {
+        const mat = hz.type === 'ice'
+          ? new THREE.MeshPhongMaterial({ color: '#c9f0ff', specular: '#ffffff', shininess: 140, transparent: true, opacity: 0.62 })
+          : hz.type === 'water'
+            ? new THREE.MeshPhongMaterial({ color: '#2d9bff', specular: '#ffffff', shininess: 110, transparent: true, opacity: 0.94 })
+            : new THREE.MeshLambertMaterial({ color: th.sand });
         const m = new THREE.Mesh(
           this._track(new THREE.PlaneGeometry(hz.w, hz.h).rotateX(-Math.PI / 2)),
-          this._track(new THREE.MeshPhongMaterial({
-            color: '#c9f0ff', specular: '#ffffff', shininess: 140, transparent: true, opacity: 0.62,
-          })),
+          this._track(mat),
         );
         m.position.set(hz.x + hz.w / 2, y, hz.y + hz.h / 2);
         m.receiveShadow = true;
@@ -446,6 +561,36 @@ export class GolfScene {
         g.add(armL, armLu, armR, armRu);
         return g;
       },
+      palm: () => {
+        const g = new THREE.Group();
+        const bark = lam('#a9794a');
+        const trunkM = cyl(2.2, 3.4, 34, 17, bark, 6);
+        trunkM.rotation.z = 0.12;
+        g.add(trunkM);
+        const leaf = lam('#2fb84a');
+        for (let i = 0; i < 7; i++) {
+          const l = cone(3.6, 28, 0, leaf, 4);
+          const a = (i / 7) * Math.PI * 2;
+          l.geometry.translate(0, 14, 0);
+          l.rotation.set(Math.cos(a) * 1.15, 0, Math.sin(a) * 1.15);
+          l.position.set(3, 33, 0);
+          g.add(l);
+        }
+        return g;
+      },
+      maple: () => {
+        const g = new THREE.Group();
+        g.add(cyl(2.6, 3.6, 16, 8, trunk, 6));
+        const cols = ['#e8741c', '#d9441f', '#f0a020', '#c8321c'];
+        const mk = (r, x, y, z) => {
+          const m = new THREE.Mesh(this._track(new THREE.IcosahedronGeometry(r, 0)), lam(cols[Math.floor(rnd() * cols.length)]));
+          m.position.set(x, y, z);
+          m.rotation.y = rnd() * 3;
+          return m;
+        };
+        g.add(mk(15, 0, 28, 0), mk(11, 9, 22, 4), mk(10, -8, 24, -4), mk(9, 1, 40, 1));
+        return g;
+      },
       mesa: () => {
         const g = new THREE.Group();
         g.add(cyl(26, 34, 46, 23, lam('#c6652f'), 7));
@@ -459,9 +604,11 @@ export class GolfScene {
       forest: [['pine', 5], ['rock', 1]],
       desert: [['mesa', 3], ['cactus', 3], ['rock', 1]],
       snow: [['snowPine', 5], ['rock', 1]],
+      tropical: [['palm', 5], ['bush', 1], ['rock', 1]],
+      autumn: [['maple', 5], ['pine', 1], ['rock', 1]],
     }[course.theme] || [['pine', 1]];
     const bag = farKinds.flatMap(([k, n]) => Array(n).fill(k));
-    const rockColor = { forest: '#8d96a0', desert: '#b0663a', snow: '#a9d3ec' }[course.theme] || '#8d96a0';
+    const rockColor = { forest: '#8d96a0', desert: '#b0663a', snow: '#a9d3ec', tropical: '#9aa3a8', autumn: '#8f8478' }[course.theme] || '#8d96a0';
     const make = (kind) => (kind === 'rock' ? makers.rock(rockColor) : makers[kind]());
 
     // distant ring of props
@@ -484,6 +631,8 @@ export class GolfScene {
       forest: ['bush', 'rock', 'pine'],
       desert: ['cactus', 'rock', 'cactus'],
       snow: ['snowPine', 'rock', 'snowPine'],
+      tropical: ['palm', 'bush', 'rock'],
+      autumn: ['maple', 'bush', 'rock'],
     }[course.theme] || ['bush'];
     const mid = PLATFORM_MARGIN / 2 + 4;
     for (let i = 0; i < 16; i++) {
@@ -495,7 +644,8 @@ export class GolfScene {
       else if (side === 2) { px = -mid; pz = t * h; }
       else { px = w + mid; pz = t * h; }
       const kind = rimKinds[Math.floor(rnd() * rimKinds.length)];
-      put(make(kind), px, -0.6, pz, kind === 'pine' || kind === 'snowPine' ? 0.62 : 0.8, rnd() * 6.28);
+      const tall = kind === 'pine' || kind === 'snowPine' || kind === 'palm' || kind === 'maple';
+      put(make(kind), px, -0.6, pz, tall ? 0.62 : 0.8, rnd() * 6.28);
     }
   }
 
@@ -753,7 +903,7 @@ export class GolfScene {
     const d = Math.hypot(dx, dz);
     if (d > 25) { dx /= d; dz /= d; } else { dx = this.followDir ? this.followDir.x : 1; dz = this.followDir ? this.followDir.z : 0; }
     const portrait = this.camera.aspect < 0.9;
-    const back = portrait ? 230 : 260, up = portrait ? 170 : 150, ahead = portrait ? 170 : 150;
+    const back = portrait ? 260 : 290, up = portrait ? 170 : 150, ahead = portrait ? 170 : 150;
     const want = new THREE.Vector3(e.x - dx * back, up, e.z - dz * back);
     const look = new THREE.Vector3(e.x + dx * ahead, 0, e.z + dz * ahead);
     if (!this.followReady) {
@@ -926,6 +1076,7 @@ export class GolfScene {
     }
 
     this._updateParticles(dt);
+    this._updatePrecip(dt);
   }
 
   _updateTrail(e, dt) {

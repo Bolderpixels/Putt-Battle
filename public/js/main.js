@@ -10,7 +10,7 @@ const el = {
   roomCode: $('room-code-display'), btnCopy: $('btn-copy'), btnLobbyLeave: $('btn-lobby-leave'),
   playerCount: $('player-count'), lobbyPlayers: $('lobby-players'),
   swatches: $('color-swatches'), patternPicks: $('pattern-picks'),
-  courseStrip: $('course-strip'), courseHint: $('course-hint'),
+  courseStrip: $('course-strip'), courseHint: $('course-hint'), courseFilters: $('course-filters'),
   btnStart: $('btn-start'), lobbyHint: $('lobby-hint'),
   holeName: $('hole-name'), holeMeta: $('hole-meta'),
   btnMenu: $('btn-menu'), btnRank: $('btn-rank'), rankText: $('rank-text'), scoreboard: $('scoreboard'),
@@ -70,7 +70,8 @@ function make(tag, props = {}, children = []) {
 
 const openModal = (m) => m.classList.remove('hidden');
 const closeModal = (m) => m.classList.add('hidden');
-const anyModalOpen = () => [el.menuModal, el.courseModal, el.confirmModal, el.gameOver].some(m => !m.classList.contains('hidden'));
+const weatherModal = $('weather-modal');
+const anyModalOpen = () => [el.menuModal, el.courseModal, el.confirmModal, weatherModal, el.gameOver].some(m => !m.classList.contains('hidden'));
 
 // ---------- 3D scene ----------
 const scene = new GolfScene($('gl'), $('labels'));
@@ -88,6 +89,8 @@ const THUMB = {
   forest: { a: '#5cc23f', b: '#4aad33', rim: '#3b8f2c', wall: '#8a5a33' },
   desert: { a: '#a39a35', b: '#8e862b', rim: '#c27a3c', wall: '#7a4a2a' },
   snow: { a: '#23a39b', b: '#1b8d86', rim: '#eaf4fb', wall: '#7a4c2b' },
+  tropical: { a: '#7fdc4a', b: '#6acb3d', rim: '#ecd9a0', wall: '#a8693a' },
+  autumn: { a: '#a9bd3c', b: '#94a82f', rim: '#c4621f', wall: '#8a5733' },
 };
 function courseThumb(c, width = 170) {
   const cv = document.createElement('canvas');
@@ -106,7 +109,7 @@ function courseThumb(c, width = 170) {
     }
   }
   for (const hz of c.hazards || []) {
-    g.fillStyle = hz.type === 'water' ? '#2d9bff' : hz.type === 'ice' ? 'rgba(201,240,255,0.65)' : '#efd9a0';
+    g.fillStyle = hz.type === 'water' ? '#2d9bff' : hz.type === 'ice' ? 'rgba(201,240,255,0.65)' : '#f3e2a8';
     if (hz.shape === 'circle') { g.beginPath(); g.arc(hz.x, hz.y, hz.r, 0, Math.PI * 2); g.fill(); }
     else g.fillRect(hz.x, hz.y, hz.w, hz.h);
   }
@@ -153,7 +156,7 @@ el.btnJoin.addEventListener('click', () => {
 
 function goHome(message) {
   roomCode = null; hostId = null; players = []; currentTurn = null; phase = 'lobby';
-  [el.menuModal, el.courseModal, el.confirmModal, el.holeSummary, el.gameOver].forEach(closeModal);
+  [el.menuModal, el.courseModal, el.confirmModal, weatherModal, el.holeSummary, el.gameOver].forEach(closeModal);
   el.scoreboard.classList.add('hidden');
   clearTimeout(holeSummaryTimer);
   scene.setPlayers([]);
@@ -170,6 +173,7 @@ function enterLobby(res) {
   applyLobby(res);
   el.roomCode.textContent = roomCode;
   buildSkinPickers();
+  refreshSkinSelection();
   showScreen('lobby');
 }
 
@@ -177,23 +181,30 @@ function applyLobby(data) {
   players = data.players;
   hostId = data.hostId;
   courseIds = data.courseIds;
+  applyWeather(data.weather);
   renderLobby();
 }
 
 function renderLobby() {
   el.playerCount.textContent = `${players.length}/${catalog.config.maxPlayers || 6}`;
-  el.lobbyPlayers.replaceChildren(...players.map(p => make('li', { class: p.id === myId ? 'me' : '' }, [
-    skinIcon(p.color, p.pattern, 80),
-    make('span', { class: 'grow', text: p.name }),
-    p.id === hostId ? make('span', { class: 'chip', text: 'HOST' }) : null,
-    p.id === myId ? make('span', { class: 'chip you', text: 'YOU' }) : null,
-  ])));
+  el.lobbyPlayers.replaceChildren(...players.map((p, i) => playerRow(p, {
+    rank: i + 1,
+    chips: [
+      p.id === hostId ? make('span', { class: 'chip', text: 'HOST' }) : null,
+      p.id === myId ? make('span', { class: 'chip you', text: 'YOU' }) : null,
+    ],
+  })));
 
   const host = isHost();
   el.btnStart.style.display = host ? 'block' : 'none';
   el.lobbyHint.style.display = host ? 'none' : 'block';
-  el.courseHint.textContent = host ? 'tap to pick which holes you play' : `${courseIds.length} hole${courseIds.length === 1 ? '' : 's'} chosen by the host`;
+  el.courseHint.textContent = host
+    ? `${courseIds.length} of ${catalog.courses.length} selected, tap to toggle`
+    : `${courseIds.length} hole${courseIds.length === 1 ? '' : 's'} chosen by the host`;
+  $('course-tools').querySelectorAll('button').forEach(b => { b.disabled = !host; });
+  renderCourseFilters();
   renderCourseStrip();
+  renderWeatherTiles();
   refreshSkinSelection();
 
   // 3D lobby preview: everyone lined up on the tee
@@ -210,11 +221,33 @@ function renderLobby() {
   }
 }
 
+function courseCard(c, props = {}, extras = []) {
+  return make('button', { 'data-theme': c.theme, ...props }, [
+    make('div', { class: 'thumb' }, [courseThumb(c, 150)]),
+    ...extras,
+    make('span', { class: 'cname', text: c.name }),
+    make('span', { class: 'cmeta', text: `PAR ${c.par}` }),
+  ]);
+}
+
+const THEME_LABEL = { all: 'All', forest: 'Forest', desert: 'Desert', snow: 'Snow', tropical: 'Tropical', autumn: 'Autumn' };
+let courseFilter = 'all';
+
+function renderCourseFilters() {
+  const themes = ['all', ...new Set(catalog.courses.map(c => c.theme))];
+  el.courseFilters.replaceChildren(...themes.map(t => make('button', {
+    class: `filter ${t === courseFilter ? 'sel' : ''}`,
+    text: THEME_LABEL[t] || t,
+    onclick: () => { courseFilter = t; renderCourseFilters(); renderCourseStrip(); },
+  })));
+}
+
 function renderCourseStrip() {
   const host = isHost();
-  el.courseStrip.replaceChildren(...catalog.courses.map(c => {
+  const list = catalog.courses.filter(c => courseFilter === 'all' || c.theme === courseFilter);
+  el.courseStrip.replaceChildren(...list.map(c => {
     const idx = courseIds.indexOf(c.id);
-    const card = make('button', {
+    return courseCard(c, {
       class: `course-card ${idx >= 0 ? 'on' : 'off'} ${host ? '' : 'static'}`,
       onclick: () => {
         previewId = c.id;
@@ -225,13 +258,7 @@ function renderCourseStrip() {
         }
         renderLobby();
       },
-    }, [
-      courseThumb(c),
-      make('span', { class: 'order', text: idx >= 0 ? String(idx + 1) : '' }),
-      make('span', { class: 'cname', text: c.name }),
-      make('span', { class: 'cmeta', text: `Par ${c.par}` }),
-    ]);
-    return card;
+    }, [make('span', { class: 'order', text: idx >= 0 ? String(idx + 1) : '' })]);
   }));
 }
 
@@ -264,7 +291,7 @@ socket.on('lobby-update', (data) => {
 
 socket.on('return-lobby', (data) => {
   if (!roomCode) return;
-  [el.menuModal, el.courseModal, el.confirmModal, el.holeSummary, el.gameOver].forEach(closeModal);
+  [el.menuModal, el.courseModal, el.confirmModal, weatherModal, el.holeSummary, el.gameOver].forEach(closeModal);
   el.scoreboard.classList.add('hidden');
   clearTimeout(holeSummaryTimer);
   scene.hideAim();
@@ -315,6 +342,7 @@ socket.on('state-update', (data) => {
   currentTurn = data.currentTurn;
   phase = data.phase;
   hostId = data.hostId;
+  applyWeather(data.weather);
   if (currentScreen === 'game') {
     scene.setPlayers(players);
     scene.setTurn(currentTurn, phase);
@@ -375,12 +403,8 @@ socket.on('hole-complete', (data) => {
   el.holeSummaryList.replaceChildren(...sorted.map(p => {
     const diff = p.strokes - data.par;
     const label = p.strokes === 1 ? 'Hole in one!' : diff <= -2 ? 'Eagle' : diff === -1 ? 'Birdie' : diff === 0 ? 'Par' : diff === 1 ? 'Bogey' : `+${diff}`;
-    const pl = players.find(q => q.id === p.id);
-    return make('li', { class: p.id === myId ? 'me' : '' }, [
-      pl ? skinIcon(pl.color, pl.pattern, 80) : null,
-      make('span', { class: 'grow' }, [p.name, make('span', { class: 'sub', text: label })]),
-      make('span', { class: 'score', text: `${p.strokes}` }),
-    ]);
+    const pl = players.find(q => q.id === p.id) || { id: p.id, name: p.name, color: p.color, pattern: 'plain' };
+    return playerRow(pl, { rank: sorted.indexOf(p) + 1, sub: label, score: p.strokes });
   }));
   el.scoreboard.classList.add('hidden');
   openModal(el.holeSummary);
@@ -392,12 +416,11 @@ socket.on('game-over', (data) => {
   closeModal(el.holeSummary);
   el.scoreboard.classList.add('hidden');
   const sorted = [...data.players].sort((a, b) => a.strokesTotal - b.strokesTotal);
-  el.podium.replaceChildren(...sorted.map((p, i) => make('li', { class: p.id === myId ? 'me' : '' }, [
-    make('span', { class: 'medal', text: ['🥇', '🥈', '🥉'][i] || `#${i + 1}` }),
-    skinIcon(p.color, p.pattern, 80),
-    make('span', { class: 'grow' }, [p.name, make('span', { class: 'sub', text: p.scores.join('  ·  ') })]),
-    make('span', { class: 'score', text: `${p.strokesTotal}` }),
-  ])));
+  el.podium.replaceChildren(...sorted.map((p, i) => playerRow(p, {
+    rank: ['🥇', '🥈', '🥉'][i] || i + 1,
+    sub: p.scores.join('  ·  '),
+    score: p.strokesTotal,
+  })));
   el.btnPlayAgain.style.display = isHost() ? 'block' : 'none';
   el.gameOverHint.textContent = isHost() ? '' : 'Waiting for the host to play again…';
   openModal(el.gameOver);
@@ -437,7 +460,7 @@ $('menu-end').addEventListener('click', () => {
 
 $('menu-course').addEventListener('click', () => {
   const playing = course ? course.id : null;
-  el.courseGrid.replaceChildren(...catalog.courses.map(c => make('button', {
+  el.courseGrid.replaceChildren(...catalog.courses.map(c => courseCard(c, {
     class: `course-card ${c.id === playing ? 'current' : ''}`,
     onclick: () => {
       if (c.id === playing) { closeModal(el.courseModal); return; }
@@ -446,12 +469,7 @@ $('menu-course').addEventListener('click', () => {
         else toast((res && res.error) || 'Could not change course');
       });
     },
-  }, [
-    courseThumb(c, 160),
-    c.id === playing ? make('span', { class: 'badge-now', text: 'PLAYING' }) : null,
-    make('span', { class: 'cname', text: c.name }),
-    make('span', { class: 'cmeta', text: `Par ${c.par}` }),
-  ])));
+  }, c.id === playing ? [make('span', { class: 'badge-now', text: 'PLAYING' })] : [])));
   closeModal(el.menuModal);
   openModal(el.courseModal);
 });
@@ -468,6 +486,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || currentScreen !== 'game') return;
   if (!el.confirmModal.classList.contains('hidden')) { closeModal(el.confirmModal); openModal(el.menuModal); }
   else if (!el.courseModal.classList.contains('hidden')) { closeModal(el.courseModal); openModal(el.menuModal); }
+  else if (!weatherModal.classList.contains('hidden')) { closeModal(weatherModal); openModal(el.menuModal); }
   else if (!el.menuModal.classList.contains('hidden')) closeModal(el.menuModal);
   else openMenu();
 });
@@ -524,6 +543,68 @@ function endDrag(shoot) {
 glCanvas.addEventListener('pointerup', () => endDrag(true));
 glCanvas.addEventListener('pointercancel', () => endDrag(false));
 glCanvas.addEventListener('lostpointercapture', () => endDrag(false));
+
+// ---------- weather (cosmetic, host controlled) ----------
+const WEATHER_META = {
+  clear: ['\u2600\uFE0F', 'Clear'], cloudy: ['\u26C5', 'Cloudy'], rain: ['\uD83C\uDF27\uFE0F', 'Rain'], snow: ['\u2744\uFE0F', 'Snow'],
+  fog: ['\uD83C\uDF2B\uFE0F', 'Fog'], sunset: ['\uD83C\uDF05', 'Sunset'], night: ['\uD83C\uDF19', 'Night'],
+};
+let weather = 'clear';
+
+function applyWeather(w) {
+  if (!w) return;
+  weather = w;
+  scene.setWeather(w);
+  renderWeatherTiles();
+}
+
+function weatherTiles(container, interactive, onPick) {
+  container.replaceChildren(...(catalog.weathers || []).map(id => {
+    const [icon, label] = WEATHER_META[id] || ['', id];
+    const props = { class: `wx-tile ${id === weather ? 'sel' : ''} ${interactive ? '' : 'static'}` };
+    if (interactive) props.onclick = () => onPick(id);
+    return make('button', props, [make('b', { text: icon }), label]);
+  }));
+}
+
+function pickWeather(id) {
+  socket.emit('set-weather', { weather: id }, (res) => { if (res && !res.ok) toast(res.error || 'Could not change weather'); });
+}
+
+function renderWeatherTiles() {
+  const host = isHost();
+  $('weather-hint').textContent = host ? 'you choose for everyone' : 'chosen by the host';
+  weatherTiles($('weather-grid'), host, pickWeather);
+  weatherTiles($('weather-modal-grid'), true, pickWeather);
+}
+
+$('menu-weather').addEventListener('click', () => { closeModal(el.menuModal); openModal(weatherModal); });
+$('weather-close').addEventListener('click', () => { closeModal(weatherModal); openModal(el.menuModal); });
+
+// ---------- leaderboard row used by the lobby, hole summary and results ----------
+function playerRow(p, { rank, sub, score, chips = [] } = {}) {
+  return make('li', { class: p.id === myId ? 'me' : '' }, [
+    rank !== undefined ? make('span', { class: 'rk', text: String(rank) }) : null,
+    make('span', { class: 'avatar' }, [skinIcon(p.color, p.pattern, 96)]),
+    make('span', { class: 'grow' }, [p.name, sub ? make('span', { class: 'sub', text: sub }) : null]),
+    ...chips,
+    score !== undefined ? make('span', { class: 'score', text: String(score) }) : null,
+  ]);
+}
+
+// ---------- course tools (host) ----------
+const allIds = () => catalog.courses.map(c => c.id);
+$('courses-all').addEventListener('click', () => {
+  socket.emit('set-courses', { ids: [...courseIds, ...allIds().filter(id => !courseIds.includes(id))] });
+});
+$('courses-clear').addEventListener('click', () => {
+  socket.emit('set-courses', { ids: [previewId && courseIds.includes(previewId) ? previewId : courseIds[0]] });
+});
+$('courses-random').addEventListener('click', () => {
+  const ids = allIds();
+  for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
+  socket.emit('set-courses', { ids: ids.slice(0, 9) });
+});
 
 // ---------- boot ----------
 async function boot() {

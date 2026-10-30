@@ -12,6 +12,7 @@ const io = new Server(server);
 const SKIN_COLORS = ['#ff4b4b', '#33b5ff', '#ffc92b', '#4cd964', '#b36bff', '#ff8a3d', '#ffffff', '#2ee6d6'];
 const SKIN_PATTERNS = ['plain', 'stripes', 'hoops', 'dots', 'checker'];
 const DEFAULT_COURSE_IDS = ['pine-forest', 'desert-canyon', 'snow-valley'];
+const WEATHERS = ['clear', 'cloudy', 'rain', 'snow', 'fog', 'sunset', 'night']; // cosmetic only
 const MAX_PLAYERS = 6;
 const MAX_STROKES_PER_HOLE = 8;
 const TICK_MS = 1000 / 60;
@@ -26,6 +27,7 @@ app.get('/api/courses', (req, res) => {
     config: { ballR: BALL_R, holeR: HOLE_R, wallHalf: WALL_HALF, maxStrokes: MAX_STROKES_PER_HOLE, maxPlayers: MAX_PLAYERS },
     skins: { colors: SKIN_COLORS, patterns: SKIN_PATTERNS },
     defaultCourseIds: DEFAULT_COURSE_IDS,
+    weathers: WEATHERS,
   });
 });
 
@@ -52,6 +54,7 @@ function newRoom(code, hostId) {
     hostId,
     players: [], // { id, name, color, pattern, strokesTotal, strokesHole, scores, sunk, x, y, vx, vy, moving }
     courseIds: [...DEFAULT_COURSE_IDS],
+    weather: 'clear',
     holeIndex: 0,
     turnOrder: [],
     turnPtr: 0,
@@ -108,7 +111,7 @@ function scoreboard(room) {
 }
 
 function lobbyPayload(room) {
-  return { players: publicPlayers(room), hostId: room.hostId, courseIds: room.courseIds };
+  return { players: publicPlayers(room), hostId: room.hostId, courseIds: room.courseIds, weather: room.weather };
 }
 
 function broadcastLobby(room) {
@@ -122,6 +125,7 @@ function broadcastState(room) {
     currentTurn: room.turnOrder[room.turnPtr] || null,
     phase: room.phase,
     hostId: room.hostId,
+    weather: room.weather,
   });
 }
 
@@ -345,10 +349,21 @@ io.on('connection', (socket) => {
   socket.on('set-courses', ({ ids } = {}) => {
     const room = hostRoom(socket);
     if (!room || room.phase !== 'lobby' || !Array.isArray(ids)) return;
-    const picked = courses.filter(c => ids.includes(c.id)).map(c => c.id); // catalogue order
+    const picked = [...new Set(ids)].filter(id => courseById[id]); // keeps the host's order
     if (picked.length === 0) return;
     room.courseIds = picked;
     broadcastLobby(room);
+  });
+
+  // weather is cosmetic and can change any time, in the lobby or mid-game
+  socket.on('set-weather', ({ weather } = {}, cb) => {
+    const room = hostRoom(socket);
+    if (!room) return cb && cb({ ok: false, error: 'Only the host can do that' });
+    if (!WEATHERS.includes(weather)) return cb && cb({ ok: false, error: 'Unknown weather' });
+    room.weather = weather;
+    broadcastLobby(room);
+    if (room.phase !== 'lobby') broadcastState(room);
+    cb && cb({ ok: true });
   });
 
   socket.on('start-game', () => {

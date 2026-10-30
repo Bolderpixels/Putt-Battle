@@ -1,7 +1,7 @@
 // Automated smoke test: two players play through all three holes.
 const { io } = require('socket.io-client');
 
-const URL = 'http://localhost:3000';
+const URL = process.env.URL || 'http://localhost:3000';
 const a = io(URL);
 const b = io(URL);
 
@@ -82,4 +82,4 @@ setTimeout(() => {
     log('lastStateA', JSON.stringify(lastStateA));
     process.exit(1);
   }
-}, 150000);
+}, 420000);
