@@ -27,6 +27,7 @@ const screens = { home: $('screen-home'), lobby: $('screen-lobby'), game: $('scr
 let currentScreen = 'home';
 function showScreen(name) {
   currentScreen = name;
+  scene.paused = name === 'home';
   Object.entries(screens).forEach(([k, s]) => s.classList.toggle('active', k === name));
 }
 
@@ -75,6 +76,7 @@ const anyModalOpen = () => [el.menuModal, el.courseModal, el.confirmModal, weath
 
 // ---------- 3D scene ----------
 const scene = new GolfScene($('gl'), $('labels'));
+scene.paused = true; // the landing page hides the 3D scene, so don't draw it until the lobby
 
 function showcase(id) {
   const c = courseOf(id) || catalog.courses[0];

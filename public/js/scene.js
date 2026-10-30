@@ -128,8 +128,10 @@ export class GolfScene {
     const frame = (now) => {
       const dt = Math.min(0.05, (now - this._last) / 1000);
       this._last = now;
-      this._update(dt);
-      this.renderer.render(this.scene, this.camera);
+      if (!this.paused) {
+        this._update(dt);
+        this.renderer.render(this.scene, this.camera);
+      }
       requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);

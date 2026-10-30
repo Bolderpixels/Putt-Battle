@@ -145,77 +145,29 @@ input:focus { border-color: var(--lime); }
 .hint { margin: 12px 0 0; font-size: 0.86rem; opacity: 0.92; text-align: center; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.3); }
 .error { min-height: 20px; margin: 10px 0 0; color: #ffd0cb; font-weight: 700; font-size: 0.9rem; text-align: center; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4); }
 
-/* ---------- HOME ---------- */
-#screen-home { align-items: center; justify-content: center; padding: 16px; padding-top: calc(16px + var(--safe-t)); padding-bottom: calc(16px + var(--safe-b)); }
-.home-inner { width: 100%; max-width: 380px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+/* ---------- HOME: the game cover is the landing hero ---------- */
+#screen-home { flex-direction: column; align-items: center; overflow-y: auto; -webkit-overflow-scrolling: touch; background: #2a1585; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Golf Rival style title: glossy white letters, gold bevel, thick blue rim with depth.
-   Each word is three stacked layers: the real text (white), then a gold stroke, then a blue stroke. */
-.logo {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: var(--display);
-  font-weight: 400;
-  font-style: italic;
-  line-height: 0.88;
-  transform: rotate(-4deg);
-  filter: drop-shadow(0 14px 10px rgba(4, 18, 80, 0.5)) drop-shadow(0 0 18px rgba(40, 130, 255, 0.55));
+/* phones: the cover is a banner at the top that melts into a blurred copy of itself */
+.hero-bg {
+  position: fixed; inset: -40px; pointer-events: none;
+  background: #2a1585 url('/img/cover.jpg') center / cover;
+  filter: blur(22px) brightness(0.78) saturate(1.15);
 }
-.logo-line { display: block; white-space: nowrap; }
-.logo-top { font-size: clamp(4.2rem, 20vw, 6.4rem); margin-bottom: 0.04em; }
-.logo-bottom { font-size: clamp(3.3rem, 15.5vw, 5rem); }
-.logo .w {
-  position: relative;
-  display: inline-block;
-  isolation: isolate;
-  letter-spacing: 0.03em;
+.hero-img {
+  position: relative; display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
+  margin-top: var(--safe-t); pointer-events: none;
+  -webkit-mask-image: linear-gradient(#000 84%, transparent); mask-image: linear-gradient(#000 84%, transparent);
 }
-.logo .w b {
-  position: relative;
-  z-index: 1;
-  font-weight: 400;
-  color: transparent;
-  background: linear-gradient(180deg, #ffffff 0%, #ffffff 44%, #dbe8f8 48%, #b4cbe6 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
+.home-inner { position: relative; width: 100%; max-width: 420px; padding: 0 16px calc(24px + var(--safe-b)); margin-top: -10px; }
+.home-tagline {
+  margin: 18px 0 0; text-align: center; font-family: var(--display); font-size: 1rem; letter-spacing: 0.3px;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.5), 0 0 12px rgba(0, 0, 0, 0.45);
 }
-.logo .w::before,
-.logo .w::after {
-  content: attr(data-t);
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  paint-order: stroke fill;
-  letter-spacing: inherit;
-}
-.logo .w::before { /* blue rim and extrusion */
-  z-index: -2;
-  color: #1b84e6;
-  -webkit-text-stroke: 0.27em #1b84e6;
-  text-shadow: 0 0.1em 0 #0a479f, 0 0.13em 0.02em #0a479f;
-}
-.logo .w::after { /* gold bevel */
-  z-index: -1;
-  color: #f6bd2c;
-  -webkit-text-stroke: 0.15em #f6bd2c;
-  text-shadow: 0 0.05em 0 #b8680a;
-}
-.logo .ball {
-  position: absolute;
-  left: 50%;
-  top: -0.52em;
-  z-index: 3;
-  width: 0.46em;
-  height: 0.46em;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.95) 0 28%, rgba(255, 255, 255, 0) 52%),
-    radial-gradient(circle, rgba(70, 90, 130, 0.18) 0.07em, rgba(0, 0, 0, 0) 0.1em) 0 0 / 0.12em 0.12em,
-    radial-gradient(circle at 40% 35%, #ffffff 0%, #e4ecfa 55%, #a9bbd9 100%);
-  box-shadow: 0 0 0 0.04em #f6bd2c, 0 0 0 0.1em #1b84e6, 0 0.1em 0 0.1em #0a479f;
+/* narrow phones: a taller 5:4 crop of the cover keeps the whole logo in frame but makes it bigger */
+@media (max-width: 600px) {
+  .hero-img { aspect-ratio: 5 / 4; object-fit: cover; object-position: 50% 42%; }
 }
 
 .home-panel { width: 100%; }
@@ -396,8 +348,18 @@ input:focus { border-color: var(--lime); }
 .modal .hint:last-child:empty { display: none; }
 .modal .wx-grid { margin-bottom: 16px; }
 
-@media (max-height: 560px) {
-  .home-inner { gap: 12px; }
-  .logo-top { font-size: 3rem; }
-  .logo-bottom { font-size: 2.5rem; }
+@media (min-aspect-ratio: 5/4) {
+  #screen-home { justify-content: flex-end; overflow: hidden; background: transparent; }
+  .hero-bg { display: none; }
+  .hero-img {
+    position: fixed; inset: 0; width: 100%; max-width: none; height: 100%; aspect-ratio: auto; margin: 0;
+    object-fit: cover; object-position: 50% 38%; -webkit-mask-image: none; mask-image: none;
+  }
+  .home-inner { max-width: 1020px; margin-top: 0; padding: 0 24px calc(26px + var(--safe-b)); }
+  .home-panel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: end; padding: 14px 16px 16px; }
+  .home-panel .field { margin: 0; }
+  .home-panel .or { display: none; }
+  .home-panel .btn-lg { width: auto; margin: 0; padding: 14px 34px; }
+  .home-panel .error { grid-column: 1 / -1; margin: 0; min-height: 0; }
+  .home-tagline { display: none; }
 }
