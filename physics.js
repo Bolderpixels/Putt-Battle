@@ -1,5 +1,7 @@
 // Server-authoritative ball physics for Putt Battle.
-const { BALL_R, HOLE_R } = require('./courses');
+const { BALL_R, HOLE_R, WALL_HALF } = require('./courses');
+
+const WALL_CLEARANCE = BALL_R + WALL_HALF; // ball centre never gets closer than this to a wall's centre line
 
 const STOP_EPS = 4;       // speed below which a ball is considered stopped (units/sec)
 const SINK_SPEED = 260;   // max speed to sink the ball
@@ -55,9 +57,9 @@ function stepBall(ball, course, dt) {
     const cp = closestPointOnSegment(ball.x, ball.y, wall.x1, wall.y1, wall.x2, wall.y2);
     const dx = ball.x - cp.x, dy = ball.y - cp.y;
     const dist = hypot(dx, dy);
-    if (dist < BALL_R && dist > 0.0001) {
+    if (dist < WALL_CLEARANCE && dist > 0.0001) {
       const nx = dx / dist, ny = dy / dist;
-      const overlap = BALL_R - dist;
+      const overlap = WALL_CLEARANCE - dist;
       ball.x += nx * overlap;
       ball.y += ny * overlap;
       const vn = ball.vx * nx + ball.vy * ny;

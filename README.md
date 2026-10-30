@@ -2,28 +2,43 @@
 
 A real-time multiplayer mini-golf game, built as an original take on **Golf Battle** (Miniclip).
 Up to 6 players share one room, take turns putting, and watch every ball move live on the same
-course. Three themed holes: **Pine Forest**, **Desert Canyon**, and **Snow Valley**, each with
+course. The game is rendered in 3D (three.js) with low-poly themed scenery, checkered turf, wooden
+walls, glossy skinned balls, trails and a phone-friendly layout. Six courses: **Pine Forest**,
+**Desert Canyon**, **Snow Valley**, **Meadow Zigzag**, **Mesa Maze** and **Frozen Lake**, with
 sand, water and ice hazards, walls, and doglegs.
 
 ## How it plays
 
-- One player creates a room and gets a 4-letter code; others join with that code (like a Kahoot/
-  Jackbox-style lobby).
-- Players take turns. On your turn, click-and-drag (or touch-drag) away from your ball to pull
-  back a shot like a slingshot, then release to putt. Drag farther for more power.
+- One player creates a room and gets a 4-letter code (or shares the invite link); others join
+  with that code.
+- In the lobby everyone picks a ball colour and pattern, and the host picks which courses make
+  up the game.
+- Players take turns. On your turn, touch anywhere and drag to pull back a shot like a
+  slingshot, then release to putt. The dotted line shows the shot; drag farther for more power.
+  A tap with no pull does nothing.
+- The camera button switches between a whole-course view and a follow camera behind the ball.
+- The pause button opens the game menu. Anyone can **Quit Game**. The host can also **Restart
+  Hole**, **Change Course** (swap the current hole for any course) and **End Game for Everyone**.
+  If the host leaves, the next player becomes host, and if the shooter leaves mid-turn the game
+  moves on.
 - The server simulates the physics (friction, wall bounces, sand/ice/water) and broadcasts every
   ball's position live, so everyone watches each shot happen in real time.
 - Strokes are tracked per hole and in total; a live rank badge (1st, 2nd, 3rd…) shows next to
-  each player's name. Lowest total strokes after 3 holes wins.
+  each player's name. Lowest total strokes after the last hole wins.
 
 ## Project structure
 
 ```
-server.js        Express + Socket.io server: rooms, turns, authoritative physics loop
+server.js         Express + Socket.io server: rooms, turns, host controls, physics loop
 physics.js        Ball movement, wall collisions, friction, hole-sink logic
-courses.js        The three hole layouts (walls, hazards, start/hole position, par)
-public/           Client: index.html, css/style.css, js/main.js (canvas rendering + input)
-test/sim.js       Automated 2-bot playthrough used to sanity-check the full game loop
+courses.js        The six hole layouts (walls, hazards, start/hole position, par)
+public/index.html Screens and overlays (home, lobby, game HUD, pause menu, results)
+public/css/       Glossy 3D-style UI: buttons, panels, ribbons
+public/js/scene.js  three.js scene: course, scenery, balls, trails, aim line, camera
+public/js/skins.js  Ball skin textures and lobby icons
+public/js/main.js   Networking, screens, menu actions and pull-back input
+test/sim.js       2-bot playthrough of a full game
+test/controls.js  Lobby setup, host controls and leaving mid-game
 ```
 
 ## Run it locally
@@ -55,8 +70,7 @@ static tier, since this needs a live server, not just static files.)
 
 - Turns are sequential (one ball moves at a time) rather than fully simultaneous, which keeps the
   physics simple and fair across laggy connections, while still showing every player's shot live.
-- `test/sim.js` spins up two headless Socket.io clients and plays a full 3-hole game end-to-end,
-  useful for checking nothing is broken after a change: `node server.js` in one terminal, then
-  `node test/sim.js` in another.
-- Easy next steps: more holes/courses, a cosmetic ball-skin picker, a "watch replay" camera pan
-  to whoever's about to putt, and a rematch button on the final screen.
+- With `node server.js` running, `node test/sim.js` plays a full game end-to-end and
+  `node test/controls.js` checks the lobby and host controls.
+- Easy next steps: a follow camera that sits behind the ball, a turn timer so an idle player
+  cannot stall the room, and kicking players from the lobby.

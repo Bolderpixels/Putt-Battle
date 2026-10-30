@@ -1,9 +1,10 @@
-// Course definitions for Putt Battle — three themed holes inspired by
-// Golf Battle (Miniclip): Pine Forest, Desert Canyon, Snow Valley.
-// Coordinate space is in course units (not pixels); client scales to canvas.
+// Course definitions for Putt Battle, inspired by Golf Battle (Miniclip).
+// Coordinate space is in course units (not pixels); the client maps (x, y) onto
+// the 3D ground plane as (x, z).
 
 const BALL_R = 10;
 const HOLE_R = 16;
+const WALL_HALF = 6; // half the visible wall thickness; balls bounce off the wall surface
 
 function wallsFromRect(x, y, w, h) {
   return [
@@ -73,6 +74,71 @@ const courses = [
       { type: 'ice', shape: 'rect', x: 0, y: 0, w: 900, h: 150 },
     ],
   },
+  {
+    id: 'meadow-zigzag',
+    name: 'Meadow Zigzag',
+    theme: 'forest',
+    par: 4,
+    width: 900,
+    height: 500,
+    start: { x: 90, y: 250 },
+    hole: { x: 820, y: 250 },
+    walls: [
+      ...wallsFromRect(0, 0, 900, 500),
+      // three baffles force a zigzag: low, high, low
+      { x1: 300, y1: 0, x2: 300, y2: 320 },
+      { x1: 520, y1: 500, x2: 520, y2: 180 },
+      { x1: 720, y1: 0, x2: 720, y2: 300 },
+    ],
+    hazards: [
+      { type: 'sand', shape: 'circle', x: 410, y: 420, r: 50 },
+      { type: 'water', shape: 'circle', x: 620, y: 390, r: 50 },
+    ],
+  },
+  {
+    id: 'mesa-maze',
+    name: 'Mesa Maze',
+    theme: 'desert',
+    par: 4,
+    width: 900,
+    height: 500,
+    start: { x: 150, y: 440 },
+    hole: { x: 820, y: 80 },
+    walls: [
+      ...wallsFromRect(0, 0, 900, 500),
+      // switchback corridors: up on the left, across the middle, up on the right
+      { x1: 0, y1: 170, x2: 600, y2: 170 },
+      { x1: 300, y1: 330, x2: 900, y2: 330 },
+    ],
+    hazards: [
+      { type: 'water', shape: 'circle', x: 150, y: 250, r: 40 },
+      { type: 'sand', shape: 'circle', x: 700, y: 250, r: 50 },
+    ],
+  },
+  {
+    id: 'frozen-lake',
+    name: 'Frozen Lake',
+    theme: 'snow',
+    par: 3,
+    width: 900,
+    height: 500,
+    start: { x: 90, y: 250 },
+    hole: { x: 810, y: 250 },
+    walls: [
+      ...wallsFromRect(0, 0, 900, 500),
+      // ice pillars to bank off
+      { x1: 300, y1: 60, x2: 300, y2: 200 },
+      { x1: 500, y1: 300, x2: 500, y2: 440 },
+      { x1: 660, y1: 100, x2: 660, y2: 220 },
+    ],
+    hazards: [
+      // water first: the first matching hazard wins in physics
+      { type: 'water', shape: 'circle', x: 420, y: 250, r: 55 },
+      { type: 'ice', shape: 'rect', x: 150, y: 0, w: 600, h: 500 },
+    ],
+  },
 ];
 
-module.exports = { courses, BALL_R, HOLE_R };
+const courseById = Object.fromEntries(courses.map(c => [c.id, c]));
+
+module.exports = { courses, courseById, BALL_R, HOLE_R, WALL_HALF };

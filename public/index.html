@@ -2,77 +2,150 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Putt Battle — Real-Time Multiplayer Mini Golf</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#2f8fe8" />
+<title>Putt Battle: Real-Time Multiplayer Mini Golf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23fff%27 stroke=%27%231d5fcb%27 stroke-width=%273%27/%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/css/style.css" />
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/build/three.module.js" } }
+</script>
 </head>
 <body>
 
-  <!-- HOME SCREEN -->
+<canvas id="gl"></canvas>
+<div id="labels"></div>
+
+<main id="ui">
+
+  <!-- HOME -->
   <section id="screen-home" class="screen active">
-    <div class="card">
-      <h1>⛳ Putt Battle</h1>
-      <p class="tagline">Real-time multiplayer mini golf. Play with friends on one link.</p>
-      <input id="name-input" maxlength="16" placeholder="Your name" autocomplete="off" />
-      <button id="btn-create" class="btn btn-primary">Create Room</button>
-      <div class="divider">or</div>
-      <div class="join-row">
-        <input id="code-input" maxlength="4" placeholder="ROOM CODE" autocomplete="off" />
-        <button id="btn-join" class="btn btn-secondary">Join</button>
+    <div class="home-inner">
+      <h1 class="logo" aria-label="Putt Battle"><span class="logo-top">PUTT</span><span class="logo-bottom">BATTLE</span></h1>
+      <div class="panel home-panel">
+        <label class="field">
+          <span>Your name</span>
+          <input id="name-input" maxlength="16" placeholder="Player" autocomplete="off" />
+        </label>
+        <button id="btn-create" class="btn btn-orange btn-lg">Create Room</button>
+        <div class="or"><span>or join a friend</span></div>
+        <div class="join-row">
+          <input id="code-input" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+          <button id="btn-join" class="btn btn-blue">Join</button>
+        </div>
+        <p id="home-error" class="error" role="alert"></p>
       </div>
-      <p id="home-error" class="error"></p>
+      <div class="ribbon"><span>Play with friends!</span></div>
     </div>
   </section>
 
-  <!-- LOBBY SCREEN -->
+  <!-- LOBBY -->
   <section id="screen-lobby" class="screen">
-    <div class="card">
-      <h2>Room code</h2>
-      <div class="room-code" id="room-code-display">----</div>
-      <p class="tagline">Share this code — up to 6 players.</p>
-      <ul id="lobby-players" class="player-list"></ul>
-      <button id="btn-start" class="btn btn-primary">Start Game</button>
-      <p id="lobby-hint" class="hint">Waiting for the host to start…</p>
+    <header class="topbar">
+      <button id="btn-lobby-leave" class="icon-btn red" aria-label="Leave room">&#10005;</button>
+      <button id="btn-copy" class="code-pill" aria-label="Copy invite link">
+        <small>ROOM CODE</small><b id="room-code-display">----</b>
+      </button>
+      <span class="topbar-spacer"></span>
+    </header>
+
+    <div class="lobby-scroll">
+      <div class="lobby-col">
+        <div class="panel">
+          <h3 class="panel-title">Players <span id="player-count"></span></h3>
+          <ul id="lobby-players" class="roster"></ul>
+        </div>
+        <div class="panel">
+          <h3 class="panel-title">Your ball</h3>
+          <div id="color-swatches" class="swatches"></div>
+          <div id="pattern-picks" class="patterns"></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-title">Courses <small id="course-hint"></small></h3>
+          <div id="course-strip" class="course-strip"></div>
+        </div>
+      </div>
     </div>
+
+    <footer class="lobby-foot">
+      <button id="btn-start" class="btn btn-green btn-lg">Start Game</button>
+      <p id="lobby-hint" class="hint">Waiting for the host to start&hellip;</p>
+    </footer>
   </section>
 
-  <!-- GAME SCREEN -->
+  <!-- GAME -->
   <section id="screen-game" class="screen">
     <div class="hud">
-      <div class="hud-left">
-        <span id="hole-name">Hole</span>
-        <span id="hole-counter" class="pill"></span>
-        <span id="par-pill" class="pill"></span>
-      </div>
-      <div class="hud-right" id="turn-indicator">—</div>
+      <button id="btn-menu" class="icon-btn blue" aria-label="Menu">&#10074;&#10074;</button>
+      <div class="hole-badge"><b id="hole-name">Hole</b><span id="hole-meta"></span></div>
+      <button id="btn-cam" class="icon-btn blue" aria-label="Switch camera" title="Camera">&#127909;</button>
+      <button id="btn-rank" class="rank-btn" aria-label="Scoreboard"><span id="rank-text">1st</span><i>&#9660;</i></button>
     </div>
+    <ul id="scoreboard" class="scoreboard hidden"></ul>
 
-    <div class="canvas-wrap">
-      <canvas id="course-canvas" width="900" height="500"></canvas>
-      <div id="power-meter"><div id="power-fill"></div></div>
-      <div id="toast"></div>
-    </div>
-
-    <ul id="scoreboard" class="scoreboard"></ul>
-
-    <div id="hole-summary" class="overlay hidden">
-      <div class="card">
-        <h2 id="hole-summary-title">Hole complete!</h2>
-        <ul id="hole-summary-list" class="player-list"></ul>
-        <p class="hint">Next hole starting…</p>
-      </div>
-    </div>
-
-    <div id="game-over" class="overlay hidden">
-      <div class="card">
-        <h2>🏆 Final results</h2>
-        <ul id="podium" class="player-list"></ul>
-        <button id="btn-play-again" class="btn btn-primary">Back to menu</button>
-      </div>
-    </div>
+    <div id="power-meter"><div id="power-fill"></div></div>
+    <div class="banner-wrap"><div class="ribbon" id="turn-ribbon"><span id="turn-text">&nbsp;</span></div></div>
+    <div id="toast"></div>
   </section>
+</main>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/main.js"></script>
+<!-- PAUSE MENU -->
+<div id="menu-modal" class="overlay hidden">
+  <div class="panel modal">
+    <div class="modal-title">Paused</div>
+    <button id="menu-resume" class="btn btn-green">Resume</button>
+    <button id="menu-restart" class="btn btn-blue host-only">Restart Hole</button>
+    <button id="menu-course" class="btn btn-blue host-only">Change Course</button>
+    <button id="menu-end" class="btn btn-orange host-only">End Game for Everyone</button>
+    <button id="menu-quit" class="btn btn-red">Quit Game</button>
+    <p id="menu-note" class="hint">Only the host can restart or change the course.</p>
+  </div>
+</div>
+
+<!-- COURSE PICKER -->
+<div id="course-modal" class="overlay hidden">
+  <div class="panel modal wide">
+    <div class="modal-title">Change Course</div>
+    <p class="hint">Pick a course for this hole. It restarts for everyone.</p>
+    <div id="course-grid" class="course-grid"></div>
+    <button id="course-cancel" class="btn btn-blue">Cancel</button>
+  </div>
+</div>
+
+<!-- QUIT CONFIRM -->
+<div id="confirm-modal" class="overlay hidden">
+  <div class="panel modal">
+    <div class="modal-title">Leave game?</div>
+    <p id="confirm-text" class="hint">You will leave the room. The game carries on without you.</p>
+    <button id="confirm-yes" class="btn btn-red">Leave</button>
+    <button id="confirm-no" class="btn btn-green">Stay</button>
+  </div>
+</div>
+
+<!-- HOLE SUMMARY -->
+<div id="hole-summary" class="overlay hidden soft">
+  <div class="panel modal">
+    <div class="modal-title" id="hole-summary-title">Hole complete!</div>
+    <ul id="hole-summary-list" class="roster"></ul>
+    <p class="hint">Next hole starting&hellip;</p>
+  </div>
+</div>
+
+<!-- GAME OVER -->
+<div id="game-over" class="overlay hidden">
+  <div class="panel modal wide">
+    <div class="modal-title">Final Results</div>
+    <ul id="podium" class="roster"></ul>
+    <button id="btn-play-again" class="btn btn-green">Play Again</button>
+    <button id="btn-gameover-leave" class="btn btn-red">Leave</button>
+    <p id="gameover-hint" class="hint"></p>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="/js/main.js"></script>
 </body>
 </html>
